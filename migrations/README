@@ -1,0 +1,5 @@
+Alembic migrations.
+
+  alembic revision --autogenerate -m "add documents"
+  alembic upgrade head
+  alembic downgrade -1
