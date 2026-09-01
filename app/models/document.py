@@ -1,7 +1,7 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import ForeignKeyConstraint, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -19,10 +19,21 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "documents"
-
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True
+    __table_args__ = (
+        # Composite FK, not two separate ones. Postgres now makes it impossible
+        # for a document's tenant_id to disagree with its workspace's tenant_id.
+        ForeignKeyConstraint(
+            ["workspace_id", "tenant_id"],
+            ["workspaces.id", "workspaces.tenant_id"],
+            name="fk_documents_workspace_id_tenant_id_workspaces",
+            ondelete="CASCADE",
+        ),
     )
+
+    # Denormalised from workspaces so every RLS policy is one indexed
+    # column comparison. Kept honest by the composite FK above.
+    tenant_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True)
     title: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
 

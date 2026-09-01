@@ -22,6 +22,7 @@ router = APIRouter(prefix="/tenants", tags=["tenants"])
 def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)) -> TenantRead:
     try:
         tenant = tenants_service.create(db, name=payload.name)
+        db.refresh(tenant)
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -29,7 +30,6 @@ def create_tenant(payload: TenantCreate, db: Session = Depends(get_db)) -> Tenan
             status_code=status.HTTP_409_CONFLICT,
             detail=f"A tenant named {payload.name!r} already exists",
         ) from None
-    db.refresh(tenant)
     return tenant
 
 

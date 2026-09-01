@@ -18,7 +18,13 @@ class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """
 
     __tablename__ = "workspaces"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_workspaces_tenant_id_name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_workspaces_tenant_id_name"),
+        # Target for child tables' composite foreign keys. Redundant with the
+        # primary key on its own, but a composite FK needs a matching unique
+        # constraint on exactly these two columns.
+        UniqueConstraint("id", "tenant_id", name="uq_workspaces_id_tenant_id"),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), index=True
