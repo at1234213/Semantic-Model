@@ -13,6 +13,17 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/semantic_model"
 
+    # Superuser connection. Used only by Alembic, which needs privileges the
+    # runtime role must not have (CREATE ROLE, DDL, and Step 14's RLS policies).
+    alembic_database_url: str = (
+        "postgresql+psycopg://postgres:postgres@localhost:5432/semantic_model"
+    )
+
+    # The non-superuser role the API connects as. Postgres exempts superusers
+    # from RLS, so the runtime role must be unprivileged for Step 14 to work.
+    app_db_user: str = "app_user"
+    app_db_password: str = "change-me"
+
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 

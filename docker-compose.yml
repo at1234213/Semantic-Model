@@ -19,7 +19,8 @@ services:
     build: .
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-semantic_model}
+      DATABASE_URL: postgresql+psycopg://${APP_DB_USER:-app_user}:${APP_DB_PASSWORD}@db:5432/${POSTGRES_DB:-semantic_model}
+      ALEMBIC_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-semantic_model}
     env_file:
       - .env
     ports:
