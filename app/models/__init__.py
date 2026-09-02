@@ -1,7 +1,8 @@
 from app.models.business_rule import BusinessRule, FilterOperator
 from app.models.data_source import DataSource, DataSourceDialect
 from app.models.dimension import Dimension, DimensionDataType, TimeGranularity
-from app.models.document import Document
+from app.models.document import Document, DocumentKind
+from app.models.document_chunk import DocumentChunk
 from app.models.entity import Entity, EntityKind
 from app.models.glossary_term import GlossaryTerm
 from app.models.measure import Aggregation, Measure
@@ -24,6 +25,8 @@ __all__ = [
     "Dimension",
     "DimensionDataType",
     "Document",
+    "DocumentChunk",
+    "DocumentKind",
     "Entity",
     "EntityKind",
     "FilterOperator",

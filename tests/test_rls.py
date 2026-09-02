@@ -13,6 +13,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from app.models import Document, Tenant, Workspace
+from app.services.chunking import content_hash
 
 
 def _scope(db: Session, tenant_id: uuid.UUID | str) -> None:
@@ -37,6 +38,7 @@ def _seed(db: Session, tenant_name: str, workspace_name: str) -> tuple[Tenant, W
         tenant_id=tenant.id,
         title=f"{workspace_name} notes",
         content="x",
+        content_hash=content_hash("x"),
     )
     db.add(document)
     db.flush()
