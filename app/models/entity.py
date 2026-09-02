@@ -17,6 +17,7 @@ from app.models.mixins import (
 
 if TYPE_CHECKING:
     from app.models.dimension import Dimension
+    from app.models.measure import Measure
     from app.models.semantic_model_version import SemanticModelVersion
 
 # Every one of these values is interpolated into compiled SQL as an identifier,
@@ -45,6 +46,11 @@ class Entity(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base):
         parent_fk("entities", "semantic_model_version_id", "semantic_model_versions"),
         UniqueConstraint(
             "semantic_model_version_id", "name", name="uq_entities_version_id_name"
+        ),
+        # Target for measures' three-column foreign key, which pins a measure's
+        # entity, version and tenant together in one constraint.
+        UniqueConstraint(
+            "id", "semantic_model_version_id", "tenant_id", name="id_version_tenant"
         ),
         CheckConstraint(
             f"source_schema ~ '{IDENTIFIER_PATTERN}'", name="source_schema_ident"
@@ -87,6 +93,11 @@ class Entity(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base):
         back_populates="entities"
     )
     dimensions: Mapped[list["Dimension"]] = relationship(
+        back_populates="entity",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    measures: Mapped[list["Measure"]] = relationship(
         back_populates="entity",
         cascade="all, delete-orphan",
         passive_deletes=True,

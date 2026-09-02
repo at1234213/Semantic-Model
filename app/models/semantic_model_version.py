@@ -28,6 +28,7 @@ from app.models.mixins import (
 if TYPE_CHECKING:
     from app.models.data_source import DataSource
     from app.models.entity import Entity
+    from app.models.metric import Metric
     from app.models.semantic_model import SemanticModel
 
 
@@ -111,6 +112,11 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
         back_populates="semantic_model_versions", viewonly=True
     )
     entities: Mapped[list["Entity"]] = relationship(
+        back_populates="semantic_model_version",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    metrics: Mapped[list["Metric"]] = relationship(
         back_populates="semantic_model_version",
         cascade="all, delete-orphan",
         passive_deletes=True,
