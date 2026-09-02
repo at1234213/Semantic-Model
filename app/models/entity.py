@@ -16,6 +16,7 @@ from app.models.mixins import (
 )
 
 if TYPE_CHECKING:
+    from app.models.business_rule import BusinessRule
     from app.models.dimension import Dimension
     from app.models.measure import Measure
     from app.models.semantic_model_version import SemanticModelVersion
@@ -101,6 +102,9 @@ class Entity(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base):
         back_populates="entity",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    business_rules: Mapped[list["BusinessRule"]] = relationship(
+        back_populates="entity", viewonly=True
     )
 
     @property
