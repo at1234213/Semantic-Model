@@ -109,14 +109,31 @@ def test_cannot_read_another_tenants_row_by_id(db_session: Session) -> None:
     assert found == 0
 
 
-def test_policies_are_actually_enabled(db_session: Session) -> None:
+def test_every_tenant_scoped_table_has_rls(db_session: Session) -> None:
+    """Any table carrying tenant_id must have row-level security enabled.
+
+    Derived rather than hardcoded on purpose: a migration in a later step that
+    adds a tenant-scoped table but forgets its policy fails here, without anyone
+    having to remember to update this list.
+    """
     rows = db_session.execute(
         text(
-            "SELECT tablename FROM pg_tables "
-            "WHERE schemaname = 'public' AND rowsecurity = true ORDER BY tablename"
+            "SELECT c.relname AS name, c.relrowsecurity AS protected "
+            "FROM pg_class c "
+            "JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind = 'r' "
+            "  AND EXISTS ("
+            "    SELECT 1 FROM information_schema.columns col "
+            "    WHERE col.table_schema = 'public' "
+            "      AND col.table_name = c.relname "
+            "      AND col.column_name = 'tenant_id') "
+            "ORDER BY c.relname"
         )
-    ).scalars().all()
-    assert rows == ["documents", "workspaces"]
+    ).all()
+
+    assert rows, "expected at least one tenant-scoped table"
+    unprotected = [row.name for row in rows if not row.protected]
+    assert unprotected == [], f"tenant-scoped tables missing RLS: {unprotected}"
 
 
 def test_app_user_cannot_bypass_rls(db_session: Session) -> None:
