@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from app.models.data_source import DataSource
     from app.models.entity import Entity
     from app.models.metric import Metric
+    from app.models.relationship import Relationship
     from app.models.semantic_model import SemanticModel
 
 
@@ -120,6 +121,15 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
         back_populates="semantic_model_version",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    # Relationships reach the version through their endpoint entities, so this
+    # is a read-only view rather than an owning collection.
+    relationships: Mapped[list["Relationship"]] = relationship(
+        primaryjoin=(
+            "and_(SemanticModelVersion.id == foreign(Relationship.semantic_model_version_id),"
+            " SemanticModelVersion.tenant_id == foreign(Relationship.tenant_id))"
+        ),
+        viewonly=True,
     )
 
     def __repr__(self) -> str:
