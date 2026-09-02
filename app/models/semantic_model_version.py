@@ -3,7 +3,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Index, Integer, Text, UniqueConstraint, Uuid, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    Uuid,
+    text,
+)
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +26,8 @@ from app.models.mixins import (
 )
 
 if TYPE_CHECKING:
+    from app.models.data_source import DataSource
+    from app.models.entity import Entity
     from app.models.semantic_model import SemanticModel
 
 
@@ -53,6 +64,15 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
             unique=True,
             postgresql_where=text("status = 'published'"),
         ),
+        parent_fk("semantic_model_versions", "data_source_id", "data_sources"),
+        # A draft may be half-assembled; a published version may not. One
+        # semantic model version binds to exactly one data source, because the
+        # compiler emits a single statement and SQL cannot join across
+        # connections.
+        CheckConstraint(
+            "status <> 'published' OR data_source_id IS NOT NULL",
+            name="published_has_source",
+        ),
     )
 
     semantic_model_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True)
@@ -73,6 +93,9 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
         default=VersionStatus.DRAFT,
         server_default=VersionStatus.DRAFT.value,
     )
+    data_source_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), index=True, default=None
+    )
     description: Mapped[str | None] = mapped_column(Text, default=None)
     created_by: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), default=None)
     published_at: Mapped[datetime | None] = mapped_column(
@@ -80,6 +103,18 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
     )
 
     semantic_model: Mapped["SemanticModel"] = relationship(back_populates="versions")
+    # viewonly: tenant_id participates in two composite FKs (to semantic_models
+    # and to data_sources), so without this both relationships believe they own
+    # writing it. Ownership belongs to semantic_model; data_source_id is set
+    # directly as a plain column.
+    data_source: Mapped["DataSource | None"] = relationship(
+        back_populates="semantic_model_versions", viewonly=True
+    )
+    entities: Mapped[list["Entity"]] = relationship(
+        back_populates="semantic_model_version",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     def __repr__(self) -> str:
         return (

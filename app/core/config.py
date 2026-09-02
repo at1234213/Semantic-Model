@@ -29,6 +29,20 @@ class Settings(BaseSettings):
 
     secret_key: str = "change-me"
 
+    # Encrypts warehouse credentials at rest. Deliberately separate from
+    # secret_key: different purpose, different rotation cadence.
+    credential_encryption_key: str = "change-me"
+
+    # A tenant controls the host of a data source, which makes this an SSRF
+    # primitive without a policy. None means "permissive in development only".
+    data_source_allow_private_hosts: bool | None = None
+
+    @property
+    def allow_private_data_source_hosts(self) -> bool:
+        if self.data_source_allow_private_hosts is not None:
+            return self.data_source_allow_private_hosts
+        return self.env == "development"
+
 
 @lru_cache
 def get_settings() -> Settings:

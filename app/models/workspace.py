@@ -8,6 +8,7 @@ from app.core.db import Base
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.data_source import DataSource
     from app.models.document import Document
     from app.models.semantic_model import SemanticModel
     from app.models.tenant import Tenant
@@ -39,6 +40,11 @@ class Workspace(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         passive_deletes=True,
     )
     semantic_models: Mapped[list["SemanticModel"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    data_sources: Mapped[list["DataSource"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan",
         passive_deletes=True,

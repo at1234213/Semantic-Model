@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import engine, get_db
 from app.main import app
+from app.services import warehouse
 
 
 @pytest.fixture
@@ -35,3 +36,10 @@ def client(db_session: Session) -> Iterator[TestClient]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _dispose_warehouse_engines() -> Iterator[None]:
+    """Warehouse engines are cached across tests and hold connection pools."""
+    yield
+    warehouse.dispose_engines()

@@ -67,13 +67,15 @@ def _checked(name: str) -> str:
 def parent_fk(table_name: str, column: str, parent_table: str) -> ForeignKeyConstraint:
     """Composite FK carrying tenant_id, so a row's tenant cannot disagree with its parent's.
 
-    The name omits the tenant_id column deliberately: including it pushed
-    `semantic_model_versions` past Postgres's identifier limit, and constraint
-    names only need to be unique within their table.
+    The name is deliberately just table + column, omitting both tenant_id and
+    the parent table: including either pushes past Postgres's 63-character
+    identifier limit once table names get as long as `business_rules` ->
+    `semantic_model_versions`. Constraint names only need to be unique within
+    their own table, and the column name already says what the parent is.
     """
     return ForeignKeyConstraint(
         [column, "tenant_id"],
         [f"{parent_table}.id", f"{parent_table}.tenant_id"],
-        name=_checked(f"fk_{table_name}_{column}_{parent_table}"),
+        name=_checked(f"fk_{table_name}_{column}"),
         ondelete="CASCADE",
     )

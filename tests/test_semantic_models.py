@@ -7,7 +7,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
 
-from app.models import SemanticModel, SemanticModelVersion, Tenant, VersionStatus, Workspace
+from app.core.crypto import encrypt_secret
+from app.models import (
+    DataSource,
+    SemanticModel,
+    SemanticModelVersion,
+    Tenant,
+    VersionStatus,
+    Workspace,
+)
 
 
 def _scope(db: Session, tenant_id: uuid.UUID | str) -> None:
@@ -34,12 +42,40 @@ def _seed(db: Session, tenant_name: str) -> tuple[Tenant, Workspace, SemanticMod
     return tenant, workspace, model
 
 
+def _ensure_data_source(db: Session, model: SemanticModel) -> uuid.UUID:
+    """A published version must name a data source, so publishing tests need one."""
+    existing = db.execute(
+        text("SELECT id FROM data_sources WHERE workspace_id = :w"),
+        {"w": str(model.workspace_id)},
+    ).scalar()
+    if existing is not None:
+        return existing
+
+    ciphertext, key_version = encrypt_secret("postgres")
+    source = DataSource(
+        tenant_id=model.tenant_id,
+        workspace_id=model.workspace_id,
+        name="warehouse",
+        host="db",
+        database="semantic_model",
+        username="postgres",
+        password_ciphertext=ciphertext,
+        key_version=key_version,
+    )
+    db.add(source)
+    db.flush()
+    return source.id
+
+
 def _version(db: Session, model: SemanticModel, number: int, status: VersionStatus):
     version = SemanticModelVersion(
         tenant_id=model.tenant_id,
         semantic_model_id=model.id,
         version=number,
         status=status,
+        data_source_id=(
+            _ensure_data_source(db, model) if status is VersionStatus.PUBLISHED else None
+        ),
     )
     db.add(version)
     db.flush()
