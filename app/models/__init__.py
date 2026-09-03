@@ -10,6 +10,7 @@ from app.models.metric import Metric, MetricFormat
 from app.models.metric_reference import MetricReference
 from app.models.relationship import Cardinality, JoinType, Relationship
 from app.models.relationship_join_key import RelationshipJoinKey
+from app.models.search_index import SearchObjectType, SemanticSearchIndex
 from app.models.semantic_model import SemanticModel
 from app.models.semantic_model_version import SemanticModelVersion, VersionStatus
 from app.models.synonym import Synonym
@@ -38,7 +39,9 @@ __all__ = [
     "MetricReference",
     "Relationship",
     "RelationshipJoinKey",
+    "SearchObjectType",
     "SemanticModel",
+    "SemanticSearchIndex",
     "SemanticModelVersion",
     "Synonym",
     "Tenant",

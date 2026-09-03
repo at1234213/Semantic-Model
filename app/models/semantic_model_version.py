@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from app.models.glossary_term import GlossaryTerm
     from app.models.metric import Metric
     from app.models.relationship import Relationship
+    from app.models.search_index import SemanticSearchIndex
     from app.models.semantic_model import SemanticModel
 
 
@@ -119,6 +120,11 @@ class SemanticModelVersion(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixi
         passive_deletes=True,
     )
     metrics: Mapped[list["Metric"]] = relationship(
+        back_populates="semantic_model_version",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    search_index: Mapped[list["SemanticSearchIndex"]] = relationship(
         back_populates="semantic_model_version",
         cascade="all, delete-orphan",
         passive_deletes=True,

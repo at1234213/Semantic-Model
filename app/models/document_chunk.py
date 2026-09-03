@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     Index,
     Integer,
     String,
@@ -11,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -52,6 +54,7 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base
         ),
         # HNSW over cosine distance. Built on an empty table here; on a large
         # one this is the slow part of the migration.
+        Index("ix_document_chunks_fts", "search_vector", postgresql_using="gin"),
         Index(
             "ix_document_chunks_embedding",
             "embedding",
@@ -67,6 +70,12 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base
 
     # The document content_hash this chunk was built from.
     source_hash: Mapped[str] = mapped_column(String(64))
+
+    # Maintained by Postgres from `content`, so it can never drift out of step.
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed("to_tsvector('english', content)", persisted=True),
+    )
 
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(EMBEDDING_DIMENSIONS), default=None
