@@ -120,8 +120,9 @@ def downgrade() -> None:
     op.drop_table("document_chunks")
 
     op.drop_constraint("uq_documents_id_tenant_id", "documents", type_="unique")
-    op.drop_constraint("ck_documents_content_hash_is_sha256", "documents", type_="check")
-    op.drop_constraint("ck_documents_title_present", "documents", type_="check")
+    # Bare names: drop_constraint applies the ck_ convention.
+    op.drop_constraint("content_hash_is_sha256", "documents", type_="check")
+    op.drop_constraint("title_present", "documents", type_="check")
     op.drop_index(op.f("ix_documents_content_hash"), table_name="documents")
     op.drop_column("documents", "content_hash")
     op.drop_column("documents", "source_uri")

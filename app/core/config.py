@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     app_db_user: str = "app_user"
     app_db_password: str = "change-me"
 
+    # "hash" needs no model download and is what the test suite uses;
+    # "sentence_transformers" is the real encoder and needs the package.
+    embedding_provider: str = "hash"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 

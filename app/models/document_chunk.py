@@ -1,7 +1,16 @@
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, Integer, String, Text, UniqueConstraint, Uuid
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import (
+    CheckConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -12,6 +21,7 @@ from app.models.mixins import (
     parent_fk,
     tenant_unique,
 )
+from app.services.embeddings import EMBEDDING_DIMENSIONS
 
 if TYPE_CHECKING:
     from app.models.document import Document
@@ -33,6 +43,21 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base
         CheckConstraint("ordinal >= 0", name="ordinal_non_negative"),
         CheckConstraint("char_count > 0", name="char_count_positive"),
         CheckConstraint("length(source_hash) = 64", name="source_hash_is_sha256"),
+        # A vector without the name of the model that produced it is unusable:
+        # cosine distance between two encoders' output is meaningless, not
+        # merely imprecise. They are set and cleared together.
+        CheckConstraint(
+            "(embedding IS NULL) = (embedding_model IS NULL)",
+            name="embedding_has_model",
+        ),
+        # HNSW over cosine distance. Built on an empty table here; on a large
+        # one this is the slow part of the migration.
+        Index(
+            "ix_document_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     document_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True)
@@ -43,7 +68,17 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TenantScopedMixin, TimestampMixin, Base
     # The document content_hash this chunk was built from.
     source_hash: Mapped[str] = mapped_column(String(64))
 
+    embedding: Mapped[list[float] | None] = mapped_column(
+        Vector(EMBEDDING_DIMENSIONS), default=None
+    )
+    # Which encoder produced it. Also the staleness check when the model changes.
+    embedding_model: Mapped[str | None] = mapped_column(String(255), default=None)
+
     document: Mapped["Document"] = relationship(back_populates="chunks")
 
     def __repr__(self) -> str:
-        return f"<DocumentChunk doc={self.document_id} #{self.ordinal} {self.char_count}ch>"
+        embedded = "embedded" if self.embedding is not None else "pending"
+        return (
+            f"<DocumentChunk doc={self.document_id} #{self.ordinal} "
+            f"{self.char_count}ch {embedded}>"
+        )

@@ -100,11 +100,8 @@ def downgrade() -> None:
         op.execute(f"DROP POLICY IF EXISTS {RLS_POLICY} ON {table}")
         op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
 
-    op.drop_constraint(
-        "ck_semantic_model_versions_published_has_source",
-        "semantic_model_versions",
-        type_="check",
-    )
+    # Bare name: drop_constraint applies the ck_ naming convention.
+    op.drop_constraint("published_has_source", "semantic_model_versions", type_="check")
 
     for table, old_name, new_name in CHECK_RENAMES:
         op.execute(f"ALTER TABLE {table} RENAME CONSTRAINT {new_name} TO {old_name}")
