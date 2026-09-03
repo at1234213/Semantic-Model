@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # "hash" needs no model download and is what the test suite uses;
     # "sentence_transformers" is the real encoder and needs the package.
     embedding_provider: str = "hash"
+    # "scripted" needs no network or credentials and is what the tests use;
+    # "claude" calls the Anthropic API and needs the package plus a key.
+    intent_provider: str = "scripted"
+    intent_model: str = "claude-opus-5"
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 

@@ -296,3 +296,14 @@ def test_blank_query_does_not_error(db_session: Session, query: str) -> None:
     _populate(db_session, version)
     rebuild_search_index(db_session, version.id)
     retrieve(db_session, query, version_id=version.id)
+
+
+def test_unrelated_query_does_not_match_by_vector_distance(db_session: Session) -> None:
+    """Without a distance floor, nearest-neighbour search returns its top N however
+    far away they are, and RRF turns that noise into a plausible score."""
+    version = _model(db_session)
+    _populate(db_session, version)
+    rebuild_search_index(db_session, version.id)
+
+    hits = retrieve(db_session, "photosynthesis chlorophyll", version_id=version.id)
+    assert hits == []

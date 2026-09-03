@@ -33,6 +33,12 @@ RRF_K = 60
 # Exact matches are not guesses. Ranked as their own list, they reliably win.
 EXACT_WEIGHT = 2.0
 
+# Nearest-neighbour search returns its top N however far away they are. On a
+# small model that means every query "matches" every object, and RRF then gives
+# the noise a plausible-looking score. Unit vectors are at distance 1.0 when
+# orthogonal, so anything at or past this is unrelated, not merely a weak match.
+MAX_VECTOR_DISTANCE = 0.9
+
 
 @dataclass
 class Hit:
@@ -164,6 +170,9 @@ def _lexical(db: Session, query: str, version_id: uuid.UUID,
 def _vector(db: Session, query: str, version_id: uuid.UUID, limit: int,
             embedder: Embedder) -> list[SemanticSearchIndex]:
     [vector] = embedder.embed([query])
+    if not any(vector):
+        return []  # a query with no tokens has no direction to search along
+
     distance = SemanticSearchIndex.embedding.cosine_distance(vector)
     statement = (
         select(SemanticSearchIndex)
@@ -171,6 +180,7 @@ def _vector(db: Session, query: str, version_id: uuid.UUID, limit: int,
             SemanticSearchIndex.semantic_model_version_id == version_id,
             SemanticSearchIndex.embedding.is_not(None),
             SemanticSearchIndex.embedding_model == embedder.name,
+            distance < MAX_VECTOR_DISTANCE,
         )
         .order_by(distance)
         .limit(limit)
