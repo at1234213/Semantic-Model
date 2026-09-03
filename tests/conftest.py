@@ -2,6 +2,7 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.db import engine, get_db
@@ -43,3 +44,57 @@ def _dispose_warehouse_engines() -> Iterator[None]:
     """Warehouse engines are cached across tests and hold connection pools."""
     yield
     warehouse.dispose_engines()
+
+
+@pytest.fixture(scope="session")
+def warehouse_tables() -> Iterator[str]:
+    """Real tables in a real schema, so execution tests exercise the genuine path.
+
+    The data plane is a separate database in production. For tests it is a
+    separate *schema* in the same container, reached through the same
+    data_source machinery — read-only connection, statement timeout and all.
+    Created with a writable connection because the warehouse one refuses writes,
+    which is the behaviour under test.
+    """
+    from sqlalchemy import create_engine
+
+    from app.core.config import get_settings
+
+    engine = create_engine(
+        get_settings().alembic_database_url, isolation_level="AUTOCOMMIT"
+    )
+    with engine.connect() as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS warehouse CASCADE"))
+        connection.execute(text("CREATE SCHEMA warehouse"))
+        connection.execute(
+            text(
+                "CREATE TABLE warehouse.customers ("
+                " id int PRIMARY KEY, country text, is_internal boolean, seats int)"
+            )
+        )
+        connection.execute(
+            text(
+                "CREATE TABLE warehouse.orders ("
+                " id int PRIMARY KEY, customer_id int, amount numeric, order_date date)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO warehouse.customers VALUES "
+                "(1,'US',false,10),(2,'US',false,50),(3,'CA',false,5),(4,'US',true,999)"
+            )
+        )
+        # Q2 2026 is "last quarter" relative to the tests' fixed today.
+        # Order 4 belongs to an internal customer; order 5 falls outside the quarter.
+        connection.execute(
+            text(
+                "INSERT INTO warehouse.orders VALUES "
+                "(1,1,100.00,'2026-04-15'),(2,2,250.00,'2026-05-20'),"
+                "(3,3,50.00,'2026-06-10'),(4,4,999.00,'2026-05-01'),"
+                "(5,1,10.00,'2026-01-05')"
+            )
+        )
+    yield "warehouse"
+    with engine.connect() as connection:
+        connection.execute(text("DROP SCHEMA IF EXISTS warehouse CASCADE"))
+    engine.dispose()

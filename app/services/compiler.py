@@ -188,8 +188,23 @@ class _Compiler:
         required.extend(
             self.dimensions[dimension_id].entity_id for dimension_id in self.dimensions
         )
+        # Entities carrying an active business rule have to be joined even when
+        # the question never mentions them. Otherwise "exclude internal
+        # customers" applies to `revenue by country` and silently does not apply
+        # to `revenue` — the same question answered two different ways.
+        required.extend(self._rule_entity_ids())
         # Root at the first measure's entity: the fact table the numbers live on.
         return required, measure_entities[0]
+
+    def _rule_entity_ids(self) -> list[uuid.UUID]:
+        return list(
+            self.db.scalars(
+                select(BusinessRule.entity_id).where(
+                    BusinessRule.semantic_model_version_id == self.query.version_id,
+                    BusinessRule.is_active.is_(True),
+                )
+            )
+        )
 
     # ---- SQL fragments ----------------------------------------------------
 
@@ -321,6 +336,16 @@ class _Compiler:
             )
         except JoinPathError as exc:
             raise CompilationError(str(exc)) from exc
+
+        fanning = [step for step in plan.steps if step.fans_out]
+        if fanning:
+            names = ", ".join(sorted(step.entity.name for step in fanning))
+            raise CompilationError(
+                f"Answering this would join to {names} across a one-to-many "
+                "relationship, which repeats every row on the other side and "
+                "double-counts the totals. Model the measure on that entity "
+                "instead, or ask for it separately."
+            )
 
         for index, entity in enumerate(plan.entities):
             self._alias_by_entity[entity.id] = f"e{index}"

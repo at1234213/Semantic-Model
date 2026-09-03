@@ -1,12 +1,16 @@
 """The question-answering pipeline, as a typed graph.
 
-    understand_intent → resolve_phrases → build_plan ─┬─ ok ──→ compile_sql → END
-                              ▲                       │
-                              └──── repair_intent ←───┘ problems, attempts left
+    understand_intent → resolve_phrases → build_plan ─┬─ ok ─→ compile_sql ─┬→ END
+                              ▲                       │                     │
+                              └──── repair_intent ←───┘        execute_sql ─┘
+                                                                     ↓
+                                                              analyze_results → END
 
-Only the stages that exist are wired. Execution and answer generation are Steps
-28 and 29 and will be appended as nodes; a placeholder node that returns nothing
-would be a worse lie than an honest end state.
+Execution is opt-in. Compiling without running is genuinely useful — previewing
+the SQL a question would produce, or checking that a semantic model can answer
+it at all — and it needs no warehouse connection. Natural-language answering is
+Step 29 and is not wired yet; a placeholder node returning nothing would be a
+worse lie than an honest end state.
 
 The repair loop is the reason this is a graph rather than a function. When the
 plan fails to build — an unknown metric, a filter value of the wrong type, an
@@ -25,8 +29,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.search_index import SemanticSearchIndex
+from app.services.analysis import ResultAnalysis, analyse
 from app.services.compiler import CompilationError, CompiledQuery, compile_query
 from app.services.embeddings import Embedder
+from app.services.execution import ExecutionError, QueryResult, data_source_for, execute
 from app.services.intent import Intent, IntentParser, IntentType, get_intent_parser
 from app.services.query_ir import SemanticQuery, build
 from app.services.resolution import ResolvedIntent, resolve
@@ -45,6 +51,9 @@ class PipelineState(TypedDict, total=False):
     resolved: ResolvedIntent | None
     query: SemanticQuery | None
     compiled: CompiledQuery | None
+    result: QueryResult | None
+    analysis: ResultAnalysis | None
+    should_execute: bool
     problems: list[str]
     status: Status
 
@@ -56,6 +65,8 @@ class PipelineResult:
     intent: Intent | None = None
     query: SemanticQuery | None = None
     compiled: CompiledQuery | None = None
+    result: QueryResult | None = None
+    analysis: ResultAnalysis | None = None
     problems: list[str] = field(default_factory=list)
     attempts: int = 0
 
@@ -123,6 +134,25 @@ def build_pipeline(
             return {"status": "failed", "problems": [str(exc)]}
         return {"compiled": compiled, "status": "ok"}
 
+    def execute_sql(state: PipelineState) -> PipelineState:
+        try:
+            source = data_source_for(db, state["version_id"])
+            result = execute(source, state["compiled"])
+        except ExecutionError as exc:
+            return {"status": "failed", "problems": [str(exc)]}
+        return {"result": result}
+
+    def analyze_results(state: PipelineState) -> PipelineState:
+        return {"analysis": analyse(state["result"])}
+
+    def after_compile(state: PipelineState) -> str:
+        if state["status"] != "ok" or not state.get("should_execute"):
+            return "finish"
+        return "execute_sql"
+
+    def after_execute(state: PipelineState) -> str:
+        return "finish" if state["status"] == "failed" else "analyze_results"
+
     def after_plan(state: PipelineState) -> str:
         if not state["problems"]:
             return "compile_sql"
@@ -141,6 +171,8 @@ def build_pipeline(
     graph.add_node("resolve_phrases", resolve_phrases)
     graph.add_node("build_plan", build_plan)
     graph.add_node("compile_sql", compile_sql)
+    graph.add_node("execute_sql", execute_sql)
+    graph.add_node("analyze_results", analyze_results)
     graph.add_node("give_up", give_up)
 
     graph.add_edge(START, "understand_intent")
@@ -152,7 +184,14 @@ def build_pipeline(
         after_plan,
         {"compile_sql": "compile_sql", "repair_intent": "repair_intent", "give_up": "give_up"},
     )
-    graph.add_edge("compile_sql", END)
+    graph.add_conditional_edges(
+        "compile_sql", after_compile, {"execute_sql": "execute_sql", "finish": END}
+    )
+    graph.add_conditional_edges(
+        "execute_sql", after_execute,
+        {"analyze_results": "analyze_results", "finish": END},
+    )
+    graph.add_edge("analyze_results", END)
     graph.add_edge("give_up", END)
     return graph.compile()
 
@@ -166,8 +205,12 @@ def answer(
     parser: IntentParser | None = None,
     embedder: Embedder | None = None,
     max_attempts: int = MAX_REPAIR_ATTEMPTS,
+    execute_query: bool = False,
 ) -> PipelineResult:
-    """Run a question through the pipeline, as far as compiled SQL."""
+    """Run a question through the pipeline.
+
+    `execute_query=False` stops at compiled SQL and needs no warehouse.
+    """
     pipeline = build_pipeline(
         db, parser=parser, embedder=embedder, max_attempts=max_attempts
     )
@@ -178,6 +221,7 @@ def answer(
             "today": today,
             "attempts": 0,
             "problems": [],
+            "should_execute": execute_query,
             "status": "pending",
         }
     )
@@ -187,6 +231,8 @@ def answer(
         intent=final.get("intent"),
         query=final.get("query"),
         compiled=final.get("compiled"),
+        result=final.get("result"),
+        analysis=final.get("analysis"),
         problems=final.get("problems", []),
         attempts=final.get("attempts", 0),
     )

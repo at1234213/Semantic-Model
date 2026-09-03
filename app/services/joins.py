@@ -32,7 +32,23 @@ class JoinStep:
     relationship: Relationship
     entity: Entity
     to_entity: Entity
-    reversed: bool  # True when traversing the edge against its declared direction
+    # True when walking the edge against the direction it was declared in.
+    against_declared_direction: bool
+
+    @property
+    def fans_out(self) -> bool:
+        """Does adding this entity multiply the rows already in the join?
+
+        Walking many -> one adds at most one row per existing row. Walking
+        one -> many multiplies them, which silently double-counts every
+        aggregate computed on the other side.
+        """
+        cardinality = str(self.relationship.cardinality)
+        if cardinality == "one_to_one":
+            return False
+        if cardinality == "many_to_one":
+            return self.against_declared_direction
+        return not self.against_declared_direction  # one_to_many
 
 
 @dataclass
@@ -126,7 +142,11 @@ def resolve_join_path(
             relationship=parent[entity_id][0],
             entity=entities[entity_id],
             to_entity=entities[parent[entity_id][1]],
-            reversed=parent[entity_id][0].to_entity_id == entity_id,
+            # We arrived at `entity_id`; if it is the edge's from_entity we
+            # walked the edge backwards.
+            against_declared_direction=(
+                parent[entity_id][0].from_entity_id == entity_id
+            ),
         )
         for entity_id in ordered
     ]

@@ -281,3 +281,31 @@ def test_the_row_limit_is_emitted(db_session: Session, model) -> None:
     compiled = _compile(db_session, version,
                         Intent(intent_type=IntentType.AGGREGATE, metric_phrases=["revenue"]))
     assert "LIMIT" in compiled.sql
+
+
+def test_a_rule_entity_is_joined_even_when_unmentioned(db_session: Session, model) -> None:
+    """A rule on customers must apply to `revenue`, not only to `revenue by country`.
+    Otherwise the same question is answered two different ways depending on
+    whether it happens to touch the table the rule lives on."""
+    version, _, _ = model
+    compiled = _compile(db_session, version,
+                        Intent(intent_type=IntentType.AGGREGATE, metric_phrases=["revenue"]))
+
+    assert "public.customers" in compiled.sql
+    assert "is_internal" in compiled.sql
+
+
+def test_a_fan_out_join_is_refused(db_session: Session, model) -> None:
+    """Walking one-to-many repeats every row on the other side, silently
+    double-counting every aggregate."""
+    version, order, customer = model
+    db_session.execute(
+        text("UPDATE relationships SET cardinality = 'one_to_many'")
+    )
+    db_session.expire_all()
+
+    with pytest.raises(CompilationError) as exc:
+        _compile(db_session, version, Intent(
+            intent_type=IntentType.BREAKDOWN, metric_phrases=["revenue"],
+            dimension_phrases=["country"]))
+    assert "double-counts" in str(exc.value)
