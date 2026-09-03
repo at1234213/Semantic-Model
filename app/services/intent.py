@@ -88,7 +88,13 @@ class Intent(BaseModel):
 class IntentParser(Protocol):
     name: str
 
-    def parse(self, question: str, *, vocabulary: list[str] | None = None) -> Intent: ...
+    def parse(
+        self,
+        question: str,
+        *,
+        vocabulary: list[str] | None = None,
+        feedback: list[str] | None = None,
+    ) -> Intent: ...
 
 
 class ScriptedIntentParser:
@@ -101,14 +107,27 @@ class ScriptedIntentParser:
     name = "scripted"
 
     def __init__(self) -> None:
-        self._responses: dict[str, Intent] = {}
+        self._responses: dict[tuple[str, tuple[str, ...]], Intent] = {}
 
-    def register(self, question: str, intent: Intent) -> None:
-        self._responses[question.strip().lower()] = intent
+    def register(
+        self, question: str, intent: Intent, *, feedback: list[str] | None = None
+    ) -> None:
+        """Register the answer for a question, optionally for a specific retry.
 
-    def parse(self, question: str, *, vocabulary: list[str] | None = None) -> Intent:
+        Keying on the feedback means a test states both the first attempt and
+        the repaired one explicitly, rather than relying on call order.
+        """
+        self._responses[(question.strip().lower(), tuple(feedback or ()))] = intent
+
+    def parse(
+        self,
+        question: str,
+        *,
+        vocabulary: list[str] | None = None,
+        feedback: list[str] | None = None,
+    ) -> Intent:
         return self._responses.get(
-            question.strip().lower(),
+            (question.strip().lower(), tuple(feedback or ())),
             Intent(
                 intent_type=IntentType.UNSUPPORTED,
                 note="No scripted response registered for this question.",
@@ -156,12 +175,25 @@ class ClaudeIntentParser:
         self._client = anthropic.Anthropic()
 
     def parse(  # pragma: no cover - requires network and credentials
-        self, question: str, *, vocabulary: list[str] | None = None
+        self,
+        question: str,
+        *,
+        vocabulary: list[str] | None = None,
+        feedback: list[str] | None = None,
     ) -> Intent:
-        content = question if not vocabulary else (
-            f"Known names in this organisation's semantic model: "
-            f"{', '.join(sorted(vocabulary))}\n\nQuestion: {question}"
-        )
+        parts = []
+        if vocabulary:
+            parts.append(
+                "Known names in this organisation's semantic model: "
+                f"{', '.join(sorted(vocabulary))}"
+            )
+        if feedback:
+            parts.append(
+                "A previous attempt at this question failed for these reasons. "
+                "Correct them:\n- " + "\n- ".join(feedback)
+            )
+        parts.append(f"Question: {question}")
+        content = "\n\n".join(parts)
 
         try:
             response = self._client.messages.parse(
