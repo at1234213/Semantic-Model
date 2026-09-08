@@ -98,3 +98,31 @@ def warehouse_tables() -> Iterator[str]:
     with engine.connect() as connection:
         connection.execute(text("DROP SCHEMA IF EXISTS warehouse CASCADE"))
     engine.dispose()
+
+
+@pytest.fixture
+def make_tenant(db_session: Session):
+    """Create a tenant and an API key for it, returning (tenant, auth headers).
+
+    Isolation tests now use two genuinely separate credentials rather than two
+    values of a header the caller chose, which is a stronger claim.
+    """
+    from app.models import Tenant
+    from app.services import api_keys
+
+    def _make(name: str, *, is_admin: bool = False):
+        tenant = Tenant(name=name)
+        db_session.add(tenant)
+        db_session.flush()
+        issued = api_keys.issue(
+            db_session, tenant_id=tenant.id, name=f"{name}-key", is_admin=is_admin
+        )
+        return tenant, {"Authorization": f"Bearer {issued.secret}"}
+
+    return _make
+
+
+@pytest.fixture
+def admin_headers(make_tenant) -> dict[str, str]:
+    _, headers = make_tenant("admin-tenant", is_admin=True)
+    return headers

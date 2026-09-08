@@ -133,9 +133,18 @@ def test_every_tenant_scoped_table_has_rls(db_session: Session) -> None:
         )
     ).all()
 
+    # api_keys is the one deliberate exemption: verifying a key means reading
+    # this table, and the tenant a policy would filter on is exactly what the
+    # read exists to discover. Only digests of high-entropy secrets are stored,
+    # so read access grants no impersonation.
+    exempt = {"api_keys"}
+
     assert rows, "expected at least one tenant-scoped table"
-    unprotected = [row.name for row in rows if not row.protected]
+    unprotected = [row.name for row in rows if not row.protected and row.name not in exempt]
     assert unprotected == [], f"tenant-scoped tables missing RLS: {unprotected}"
+
+    still_needed = exempt - {row.name for row in rows}
+    assert not still_needed, f"exemption listed for a table that no longer exists: {still_needed}"
 
 
 def test_app_user_cannot_bypass_rls(db_session: Session) -> None:

@@ -1,3 +1,4 @@
+from app.models.api_key import ApiKey
 from app.models.business_rule import BusinessRule, FilterOperator
 from app.models.data_source import DataSource, DataSourceDialect
 from app.models.dimension import Dimension, DimensionDataType, TimeGranularity
@@ -8,6 +9,7 @@ from app.models.glossary_term import GlossaryTerm
 from app.models.measure import Aggregation, Measure
 from app.models.metric import Metric, MetricFormat
 from app.models.metric_reference import MetricReference
+from app.models.query_run import QueryRun, RunStatus
 from app.models.relationship import Cardinality, JoinType, Relationship
 from app.models.relationship_join_key import RelationshipJoinKey
 from app.models.search_index import SearchObjectType, SemanticSearchIndex
@@ -19,6 +21,7 @@ from app.models.workspace import Workspace
 
 __all__ = [
     "Aggregation",
+    "ApiKey",
     "BusinessRule",
     "Cardinality",
     "DataSource",
@@ -37,7 +40,9 @@ __all__ = [
     "Metric",
     "MetricFormat",
     "MetricReference",
+    "QueryRun",
     "Relationship",
+    "RunStatus",
     "RelationshipJoinKey",
     "SearchObjectType",
     "SemanticModel",

@@ -7,6 +7,7 @@ from app.core.db import Base
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.api_key import ApiKey
     from app.models.workspace import Workspace
 
 
@@ -23,6 +24,10 @@ class Tenant(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="tenant",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+
+    api_keys: Mapped[list["ApiKey"]] = relationship(
+        back_populates="tenant", cascade="all, delete-orphan", passive_deletes=True
     )
 
     def __repr__(self) -> str:
